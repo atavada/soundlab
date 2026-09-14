@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(swift build*)",
+      "Bash(swift test*)",
+      "Bash(make*)",
+      "Bash(./scripts/bundle.sh*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)"
+    ]
+  }
+}
