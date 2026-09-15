@@ -8,7 +8,7 @@
 |---|---|
 | **Project/Feature Name** | SoundLab |
 | **Author** | Ardhatavada |
-| **Status** | Draft |
+| **Status** | Complete — v1.0 Released |
 | **Date** | September 2026 |
 | **Target Release** | v1.0 — Q4 2026 |
 | **Platform** | macOS 11.0+ (Intel & Apple Silicon) |
@@ -76,11 +76,11 @@ macOS exposes audio device switching through a deep System Settings path. Users 
 **So that** I don't need to open System Settings each time.
 
 **Acceptance Criteria:**
-- [ ] All `AVAudioDevice` output devices are listed in the menubar menu
-- [ ] Currently active device is marked with a checkmark indicator
-- [ ] Clicking a device sets it as the default output immediately
-- [ ] Switching feedback is shown (brief menu title update or notification)
-- [ ] Input device switching works identically via a separate menu section
+- [x] All `AVAudioDevice` output devices are listed in the menubar menu
+- [x] Currently active device is marked with a checkmark indicator
+- [x] Clicking a device sets it as the default output immediately
+- [x] Switching feedback is shown (brief menu title update or notification)
+- [x] Input device switching works identically via a separate menu section
 
 ### User Story 2: Volume Control
 **As a** user who adjusts volume frequently,  
@@ -88,11 +88,11 @@ macOS exposes audio device switching through a deep System Settings path. Users 
 **So that** each device retains its own preferred volume level.
 
 **Acceptance Criteria:**
-- [ ] Volume slider in menubar or preferences adjusts system master volume
-- [ ] Each device stores its last-used volume in `UserDefaults`
-- [ ] When switching devices, volume jumps to that device's remembered level
-- [ ] Volume slider responds to keyboard arrow keys (increment/decrement)
-- [ ] Volume changes are reflected in the macOS volume indicator
+- [x] Volume slider in menubar or preferences adjusts system master volume
+- [x] Each device stores its last-used volume in `UserDefaults`
+- [x] When switching devices, volume jumps to that device's remembered level
+- [x] Volume slider responds to keyboard arrow keys (increment/decrement)
+- [x] Volume changes are reflected in the macOS volume indicator
 
 ### User Story 3: Preferences
 **As a** user,  
@@ -100,11 +100,11 @@ macOS exposes audio device switching through a deep System Settings path. Users 
 **So that** I can customize behavior without leaving the app.
 
 **Acceptance Criteria:**
-- [ ] Preferences accessible from menubar menu ("Preferences…") or `⌘,`
-- [ ] Preferences window includes: default output device, default input device, volume per device, startup behavior
-- [ ] "Launch at login" toggle setting
-- [ ] Dark mode / Light mode toggle (or follow system)
-- [ ] Settings persist across app restarts
+- [x] Preferences accessible from menubar menu ("Preferences…") or `⌘,`
+- [x] Preferences window includes: default output device, default input device, volume per device, startup behavior
+- [x] "Launch at login" toggle setting
+- [x] Dark mode / Light mode toggle (or follow system)
+- [x] Settings persist across app restarts
 
 ### User Story 4: Keyboard Shortcuts
 **As a** power user,  
@@ -112,10 +112,10 @@ macOS exposes audio device switching through a deep System Settings path. Users 
 **So that** I can switch devices without touching the mouse.
 
 **Acceptance Criteria:**
-- [ ] Default shortcut: `⌃⌥⌘Space` to cycle output devices
-- [ ] Default shortcut: `⌃⌥⌘↑/↓` to cycle input devices
-- [ ] Shortcuts configurable in Preferences
-- [ ] Shortcuts work even when app is running in background
+- [x] Default shortcut: `⌃⌥⌘Space` to cycle output devices
+- [x] Default shortcut: `⌃⌥⌘↑/↓` to cycle input devices
+- [x] Shortcuts configurable in Preferences
+- [x] Shortcuts work even when app is running in background
 
 ### User Story 5: Menubar Experience
 **As a** user,  
@@ -123,10 +123,10 @@ macOS exposes audio device switching through a deep System Settings path. Users 
 **So that** I always know what's active at a glance.
 
 **Acceptance Criteria:**
-- [ ] Menubar icon shows a generic audio/speaker icon by default
-- [ ] Icon changes subtly to indicate active device type (speaker, headphone, mic)
-- [ ] Menu updates in real-time when devices are plugged/unplugged
-- [ ] Menubar shows current device name as title (truncated if too long)
+- [x] Menubar icon shows a generic audio/speaker icon by default
+- [x] Icon changes subtly to indicate active device type (speaker, headphone, mic)
+- [x] Menu updates in real-time when devices are plugged/unplugged
+- [x] Menubar shows current device name as title (truncated if too long)
 
 ---
 
