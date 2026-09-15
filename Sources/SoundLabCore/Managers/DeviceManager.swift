@@ -8,19 +8,31 @@ public final class DeviceManager: @unchecked Sendable {
     private let settingsManager: SettingsManager
     private let lock = NSLock()
 
-    public private(set) var outputDevices: [AudioDevice] = []
-    public private(set) var inputDevices: [AudioDevice] = []
+    private var _outputDevices: [AudioDevice] = []
+    private var _inputDevices: [AudioDevice] = []
+
+    public var outputDevices: [AudioDevice] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _outputDevices
+    }
+
+    public var inputDevices: [AudioDevice] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _inputDevices
+    }
 
     public var defaultOutputDevice: AudioDevice? {
         lock.lock()
         defer { lock.unlock() }
-        return outputDevices.first { $0.isDefault }
+        return _outputDevices.first { $0.isDefault }
     }
 
     public var defaultInputDevice: AudioDevice? {
         lock.lock()
         defer { lock.unlock() }
-        return inputDevices.first { $0.isDefault }
+        return _inputDevices.first { $0.isDefault }
     }
 
     private var changeListeners: [@Sendable () -> Void] = []
@@ -61,8 +73,8 @@ public final class DeviceManager: @unchecked Sendable {
         let sortedInputs = newInputs.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
         lock.lock()
-        self.outputDevices = sortedOutputs
-        self.inputDevices = sortedInputs
+        self._outputDevices = sortedOutputs
+        self._inputDevices = sortedInputs
         let listeners = changeListeners
         lock.unlock()
 
@@ -73,7 +85,7 @@ public final class DeviceManager: @unchecked Sendable {
 
     public func setDefaultOutput(deviceUID: String) throws {
         lock.lock()
-        guard let device = outputDevices.first(where: { $0.uid == deviceUID }) else {
+        guard let device = _outputDevices.first(where: { $0.uid == deviceUID }) else {
             lock.unlock()
             throw SoundLabAudioError.deviceUIDNotFound(uid: deviceUID)
         }
@@ -86,7 +98,7 @@ public final class DeviceManager: @unchecked Sendable {
 
     public func setDefaultInput(deviceUID: String) throws {
         lock.lock()
-        guard let device = inputDevices.first(where: { $0.uid == deviceUID }) else {
+        guard let device = _inputDevices.first(where: { $0.uid == deviceUID }) else {
             lock.unlock()
             throw SoundLabAudioError.deviceUIDNotFound(uid: deviceUID)
         }
@@ -98,13 +110,13 @@ public final class DeviceManager: @unchecked Sendable {
 
     public func cycleNextOutputDevice() throws {
         lock.lock()
-        guard !outputDevices.isEmpty else {
+        guard !_outputDevices.isEmpty else {
             lock.unlock()
             return
         }
-        let currentIndex = outputDevices.firstIndex { $0.isDefault } ?? -1
-        let nextIndex = (currentIndex + 1) % outputDevices.count
-        let nextDevice = outputDevices[nextIndex]
+        let currentIndex = _outputDevices.firstIndex { $0.isDefault } ?? -1
+        let nextIndex = (currentIndex + 1) % _outputDevices.count
+        let nextDevice = _outputDevices[nextIndex]
         lock.unlock()
 
         try setDefaultOutput(deviceUID: nextDevice.uid)
@@ -112,13 +124,13 @@ public final class DeviceManager: @unchecked Sendable {
 
     public func cycleNextInputDevice() throws {
         lock.lock()
-        guard !inputDevices.isEmpty else {
+        guard !_inputDevices.isEmpty else {
             lock.unlock()
             return
         }
-        let currentIndex = inputDevices.firstIndex { $0.isDefault } ?? -1
-        let nextIndex = (currentIndex + 1) % inputDevices.count
-        let nextDevice = inputDevices[nextIndex]
+        let currentIndex = _inputDevices.firstIndex { $0.isDefault } ?? -1
+        let nextIndex = (currentIndex + 1) % _inputDevices.count
+        let nextDevice = _inputDevices[nextIndex]
         lock.unlock()
 
         try setDefaultInput(deviceUID: nextDevice.uid)

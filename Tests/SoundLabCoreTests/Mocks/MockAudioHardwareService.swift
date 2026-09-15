@@ -8,8 +8,8 @@ public final class MockAudioHardwareService: AudioHardwareServiceProtocol, @unch
     public var defaultOutputID: AudioDeviceID = 0
     public var defaultInputID: AudioDeviceID = 0
 
-    private var deviceListListeners: [AudioListenerBlock] = []
-    private var defaultDeviceListeners: [AudioListenerBlock] = []
+    private var deviceListListeners: [AudioListenerToken: AudioListenerBlock] = [:]
+    private var defaultDeviceListeners: [AudioListenerToken: AudioListenerBlock] = [:]
 
     public init() {}
 
@@ -65,7 +65,7 @@ public final class MockAudioHardwareService: AudioHardwareServiceProtocol, @unch
             throw SoundLabAudioError.deviceNotFound(id: id)
         }
         defaultOutputID = id
-        let listeners = defaultDeviceListeners
+        let listeners = Array(defaultDeviceListeners.values)
         lock.unlock()
         for listener in listeners { listener() }
     }
@@ -77,7 +77,7 @@ public final class MockAudioHardwareService: AudioHardwareServiceProtocol, @unch
             throw SoundLabAudioError.deviceNotFound(id: id)
         }
         defaultInputID = id
-        let listeners = defaultDeviceListeners
+        let listeners = Array(defaultDeviceListeners.values)
         lock.unlock()
         for listener in listeners { listener() }
     }
@@ -97,21 +97,51 @@ public final class MockAudioHardwareService: AudioHardwareServiceProtocol, @unch
         devices[id] = dev
     }
 
-    public func addDeviceListChangeListener(block: @escaping AudioListenerBlock) throws {
+    @discardableResult
+    public func addDeviceListChangeListener(block: @escaping AudioListenerBlock) throws -> AudioListenerToken {
         lock.lock()
         defer { lock.unlock() }
-        deviceListListeners.append(block)
+        let token = UUID()
+        deviceListListeners[token] = block
+        return token
     }
 
-    public func addDefaultDeviceChangeListener(block: @escaping AudioListenerBlock) throws {
+    @discardableResult
+    public func addDefaultDeviceChangeListener(block: @escaping AudioListenerBlock) throws -> AudioListenerToken {
         lock.lock()
         defer { lock.unlock() }
-        defaultDeviceListeners.append(block)
+        let token = UUID()
+        defaultDeviceListeners[token] = block
+        return token
+    }
+
+    public func removeDeviceListChangeListener(token: AudioListenerToken) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        deviceListListeners.removeValue(forKey: token)
+    }
+
+    public func removeDefaultDeviceChangeListener(token: AudioListenerToken) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        defaultDeviceListeners.removeValue(forKey: token)
+    }
+
+    public func removeDeviceListChangeListener() throws {
+        lock.lock()
+        defer { lock.unlock() }
+        deviceListListeners.removeAll()
+    }
+
+    public func removeDefaultDeviceChangeListener() throws {
+        lock.lock()
+        defer { lock.unlock() }
+        defaultDeviceListeners.removeAll()
     }
 
     public func triggerDeviceListChange() {
         lock.lock()
-        let listeners = deviceListListeners
+        let listeners = Array(deviceListListeners.values)
         lock.unlock()
         for listener in listeners { listener() }
     }

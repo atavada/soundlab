@@ -1,6 +1,8 @@
 import CoreAudio
+import Foundation
 
 public typealias AudioListenerBlock = @Sendable () -> Void
+public typealias AudioListenerToken = UUID
 
 public protocol AudioHardwareServiceProtocol: Sendable {
     func getAllDeviceIDs() throws -> [AudioDeviceID]
@@ -13,6 +15,15 @@ public protocol AudioHardwareServiceProtocol: Sendable {
     func setDefaultInputDevice(id: AudioDeviceID) throws
     func getVolume(for id: AudioDeviceID, scope: DeviceScope) throws -> Float
     func setVolume(_ volume: Float, for id: AudioDeviceID, scope: DeviceScope) throws
-    func addDeviceListChangeListener(block: @escaping AudioListenerBlock) throws
-    func addDefaultDeviceChangeListener(block: @escaping AudioListenerBlock) throws
+    @discardableResult
+    func addDeviceListChangeListener(block: @escaping AudioListenerBlock) throws -> AudioListenerToken
+    @discardableResult
+    func addDefaultDeviceChangeListener(block: @escaping AudioListenerBlock) throws -> AudioListenerToken
+    func removeDeviceListChangeListener(token: AudioListenerToken) throws
+    func removeDefaultDeviceChangeListener(token: AudioListenerToken) throws
+}
+
+public extension AudioHardwareServiceProtocol {
+    func removeDeviceListChangeListener() throws {}
+    func removeDefaultDeviceChangeListener() throws {}
 }

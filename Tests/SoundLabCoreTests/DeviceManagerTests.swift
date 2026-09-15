@@ -154,5 +154,13 @@ import Foundation
         try await Task.sleep(nanoseconds: 50_000_000)
 
         #expect(deviceManager.outputDevices.count == 2)
+
+        observer.stopObserving()
+        mock.addMockDevice(id: 3, uid: "out-3", name: "AirPods", scopes: [.output])
+        mock.triggerDeviceListChange()
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+        // Device count should remain 2 because observer was stopped
+        #expect(deviceManager.outputDevices.count == 2)
     }
 }

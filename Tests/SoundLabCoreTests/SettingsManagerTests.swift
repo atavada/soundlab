@@ -33,6 +33,16 @@ import Foundation
 
         settings.removeSavedVolume(for: "test-uid-clamp")
         #expect(settings.getSavedVolume(for: "test-uid-clamp") == nil)
+
+        // Test resetAllSavedVolumes
+        settings.saveVolume(0.3, for: "uid-a")
+        settings.saveVolume(0.7, for: "uid-b")
+        #expect(settings.getSavedVolume(for: "uid-a") == 0.3)
+        #expect(settings.getSavedVolume(for: "uid-b") == 0.7)
+
+        settings.resetAllSavedVolumes()
+        #expect(settings.getSavedVolume(for: "uid-a") == nil)
+        #expect(settings.getSavedVolume(for: "uid-b") == nil)
     }
 
     @Test func testPreferencesDefaults() {

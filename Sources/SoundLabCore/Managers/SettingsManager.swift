@@ -38,6 +38,15 @@ public final class SettingsManager: @unchecked Sendable {
         userDefaults.removeObject(forKey: key)
     }
 
+    public func resetAllSavedVolumes() {
+        lock.lock()
+        defer { lock.unlock() }
+        let dict = userDefaults.dictionaryRepresentation()
+        for key in dict.keys where key.hasPrefix(Keys.volumePrefix) {
+            userDefaults.removeObject(forKey: key)
+        }
+    }
+
     public var showDeviceNameInMenuBar: Bool {
         get {
             lock.lock()

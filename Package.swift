@@ -25,7 +25,8 @@ let package = Package(
         .executableTarget(
             name: "SoundLabApp",
             dependencies: ["SoundLabCore", "SoundLabUI"],
-            path: "Sources/SoundLabApp"
+            path: "Sources/SoundLabApp",
+            exclude: ["Info.plist"]
         ),
         .testTarget(
             name: "SoundLabCoreTests",

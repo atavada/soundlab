@@ -43,8 +43,8 @@ public final class CoreAudioHardwareService: AudioHardwareServiceProtocol, @unch
             mElement: kAudioObjectPropertyElementMain
         )
 
-        var deviceUID: CFString = "" as CFString
-        var dataSize = UInt32(MemoryLayout<CFString>.size)
+        var unmanaged: Unmanaged<CFString>?
+        var dataSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
 
         let status = AudioObjectGetPropertyData(
             id,
@@ -52,10 +52,10 @@ public final class CoreAudioHardwareService: AudioHardwareServiceProtocol, @unch
             0,
             nil,
             &dataSize,
-            &deviceUID
+            &unmanaged
         )
-        guard status == noErr else { throw SoundLabAudioError.halError(status) }
-        return deviceUID as String
+        guard status == noErr, let unmanaged = unmanaged else { throw SoundLabAudioError.halError(status) }
+        return unmanaged.takeRetainedValue() as String
     }
 
     public func getDeviceName(for id: AudioDeviceID) throws -> String {
@@ -65,8 +65,8 @@ public final class CoreAudioHardwareService: AudioHardwareServiceProtocol, @unch
             mElement: kAudioObjectPropertyElementMain
         )
 
-        var deviceName: CFString = "" as CFString
-        var dataSize = UInt32(MemoryLayout<CFString>.size)
+        var unmanaged: Unmanaged<CFString>?
+        var dataSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
 
         let status = AudioObjectGetPropertyData(
             id,
@@ -74,10 +74,10 @@ public final class CoreAudioHardwareService: AudioHardwareServiceProtocol, @unch
             0,
             nil,
             &dataSize,
-            &deviceName
+            &unmanaged
         )
-        guard status == noErr else { throw SoundLabAudioError.halError(status) }
-        return deviceName as String
+        guard status == noErr, let unmanaged = unmanaged else { throw SoundLabAudioError.halError(status) }
+        return unmanaged.takeRetainedValue() as String
     }
 
     public func getDeviceScopes(for id: AudioDeviceID) throws -> [DeviceScope] {
@@ -233,37 +233,125 @@ public final class CoreAudioHardwareService: AudioHardwareServiceProtocol, @unch
         guard status == noErr else { throw SoundLabAudioError.volumeNotSupported(id: id) }
     }
 
-    public func addDeviceListChangeListener(block: @escaping AudioListenerBlock) throws {
+    private let listenerLock = NSLock()
+    private var deviceListListeners: [AudioListenerToken: AudioObjectPropertyListenerBlock] = [:]
+    private var defaultDeviceListeners: [AudioListenerToken: AudioObjectPropertyListenerBlock] = [:]
+
+    @discardableResult
+    public func addDeviceListChangeListener(block: @escaping AudioListenerBlock) throws -> AudioListenerToken {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
 
+        let listenerBlock: AudioObjectPropertyListenerBlock = { _, _ in
+            block()
+        }
+
         let status = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &propertyAddress,
-            DispatchQueue.main
-        ) { _, _ in
-            block()
+            DispatchQueue.main,
+            listenerBlock
+        )
+        guard status == noErr else { throw SoundLabAudioError.halError(status) }
+
+        let token = UUID()
+        listenerLock.lock()
+        deviceListListeners[token] = listenerBlock
+        listenerLock.unlock()
+        return token
+    }
+
+    public func removeDeviceListChangeListener(token: AudioListenerToken) throws {
+        listenerLock.lock()
+        guard let listenerBlock = deviceListListeners.removeValue(forKey: token) else {
+            listenerLock.unlock()
+            return
         }
+        listenerLock.unlock()
+
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let status = AudioObjectRemovePropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress,
+            DispatchQueue.main,
+            listenerBlock
+        )
         guard status == noErr else { throw SoundLabAudioError.halError(status) }
     }
 
-    public func addDefaultDeviceChangeListener(block: @escaping AudioListenerBlock) throws {
+    public func removeDeviceListChangeListener() throws {
+        listenerLock.lock()
+        let tokens = Array(deviceListListeners.keys)
+        listenerLock.unlock()
+        for token in tokens {
+            try removeDeviceListChangeListener(token: token)
+        }
+    }
+
+    @discardableResult
+    public func addDefaultDeviceChangeListener(block: @escaping AudioListenerBlock) throws -> AudioListenerToken {
         var outputAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
 
+        let listenerBlock: AudioObjectPropertyListenerBlock = { _, _ in
+            block()
+        }
+
         let status = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &outputAddress,
-            DispatchQueue.main
-        ) { _, _ in
-            block()
-        }
+            DispatchQueue.main,
+            listenerBlock
+        )
         guard status == noErr else { throw SoundLabAudioError.halError(status) }
+
+        let token = UUID()
+        listenerLock.lock()
+        defaultDeviceListeners[token] = listenerBlock
+        listenerLock.unlock()
+        return token
+    }
+
+    public func removeDefaultDeviceChangeListener(token: AudioListenerToken) throws {
+        listenerLock.lock()
+        guard let listenerBlock = defaultDeviceListeners.removeValue(forKey: token) else {
+            listenerLock.unlock()
+            return
+        }
+        listenerLock.unlock()
+
+        var outputAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let status = AudioObjectRemovePropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &outputAddress,
+            DispatchQueue.main,
+            listenerBlock
+        )
+        guard status == noErr else { throw SoundLabAudioError.halError(status) }
+    }
+
+    public func removeDefaultDeviceChangeListener() throws {
+        listenerLock.lock()
+        let tokens = Array(defaultDeviceListeners.keys)
+        listenerLock.unlock()
+        for token in tokens {
+            try removeDefaultDeviceChangeListener(token: token)
+        }
     }
 }

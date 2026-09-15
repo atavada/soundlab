@@ -5,7 +5,7 @@ public final class VolumeManager: @unchecked Sendable {
     private let hardwareService: AudioHardwareServiceProtocol
     private let settingsManager: SettingsManager
     private let lock = NSLock()
-    private var volumeChangeCallbacks: [@Sendable (Float) -> Void] = []
+    private var volumeChangeCallbacks: [UUID: @Sendable (Float) -> Void] = [:]
 
     public init(hardwareService: AudioHardwareServiceProtocol, settingsManager: SettingsManager) {
         self.hardwareService = hardwareService
@@ -41,15 +41,24 @@ public final class VolumeManager: @unchecked Sendable {
         }
     }
 
-    public func addVolumeChangeObserver(callback: @escaping @Sendable (Float) -> Void) {
+    @discardableResult
+    public func addVolumeChangeObserver(callback: @escaping @Sendable (Float) -> Void) -> UUID {
+        let id = UUID()
         lock.lock()
         defer { lock.unlock() }
-        volumeChangeCallbacks.append(callback)
+        volumeChangeCallbacks[id] = callback
+        return id
+    }
+
+    public func removeVolumeChangeObserver(id: UUID) {
+        lock.lock()
+        defer { lock.unlock() }
+        volumeChangeCallbacks.removeValue(forKey: id)
     }
 
     private func notifyVolumeChange(_ volume: Float) {
         lock.lock()
-        let callbacks = volumeChangeCallbacks
+        let callbacks = Array(volumeChangeCallbacks.values)
         lock.unlock()
         for callback in callbacks {
             callback(volume)

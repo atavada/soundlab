@@ -14,6 +14,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController!
     private var hotkeyManager: CarbonHotkeyManager!
     private var preferencesWindowController: PreferencesWindowController?
+    private var sleepWakeObserver: (any NSObjectProtocol)?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         settingsManager = SettingsManager()
@@ -29,7 +30,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         statusBarController = StatusBarController(
             deviceManager: deviceManager,
             volumeManager: volumeManager,
-            settingsManager: settingsManager
+            settingsManager: settingsManager,
+            notificationDispatcher: notificationDispatcher
         )
 
         statusBarController.onOpenPreferences = { [weak self] in
@@ -48,13 +50,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openPreferences() {
         if preferencesWindowController == nil {
-            preferencesWindowController = PreferencesWindowController(settingsManager: settingsManager)
+            preferencesWindowController = PreferencesWindowController(
+                settingsManager: settingsManager,
+                deviceManager: deviceManager
+            )
         }
         preferencesWindowController?.showPreferences()
     }
 
     private func registerSleepWakeNotifications() {
-        NSWorkspace.shared.notificationCenter.addObserver(
+        sleepWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
@@ -67,5 +72,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager.unregisterHotkeys()
+        deviceObserver.stopObserving()
+        if let observer = sleepWakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            sleepWakeObserver = nil
+        }
     }
 }

@@ -16,11 +16,12 @@ public struct AudioDevice: Identifiable, Hashable, Sendable {
     }
 
     public static func == (lhs: AudioDevice, rhs: AudioDevice) -> Bool {
-        lhs.id == rhs.id && lhs.uid == rhs.uid
+        lhs.id == rhs.id && lhs.uid == rhs.uid && lhs.scope == rhs.scope
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(id)
         hasher.combine(uid)
+        hasher.combine(scope)
     }
 }

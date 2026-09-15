@@ -7,12 +7,19 @@ public final class StatusBarController: NSObject {
     private let deviceManager: DeviceManager
     private let volumeManager: VolumeManager
     private let settingsManager: SettingsManager
+    private let notificationDispatcher: NotificationDispatcher
     public var onOpenPreferences: (() -> Void)?
 
-    public init(deviceManager: DeviceManager, volumeManager: VolumeManager, settingsManager: SettingsManager) {
+    public init(
+        deviceManager: DeviceManager,
+        volumeManager: VolumeManager,
+        settingsManager: SettingsManager,
+        notificationDispatcher: NotificationDispatcher
+    ) {
         self.deviceManager = deviceManager
         self.volumeManager = volumeManager
         self.settingsManager = settingsManager
+        self.notificationDispatcher = notificationDispatcher
         super.init()
         setupStatusItem()
         rebuildMenu()
@@ -20,6 +27,7 @@ public final class StatusBarController: NSObject {
         deviceManager.addChangeListener { [weak self] in
             DispatchQueue.main.async {
                 self?.rebuildMenu()
+                self?.updateStatusItemIcon()
                 self?.updateStatusItemTitle()
             }
         }
@@ -27,14 +35,32 @@ public final class StatusBarController: NSObject {
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem?.button {
-            if #available(macOS 11.0, *) {
-                let image = NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: "SoundLab")
-                image?.isTemplate = true
-                button.image = image
-            }
-        }
+        updateStatusItemIcon()
         updateStatusItemTitle()
+    }
+
+    public func updateStatusItemIcon() {
+        guard let button = statusItem?.button else { return }
+        let symbolName: String
+        if let def = deviceManager.defaultOutputDevice {
+            let lower = def.name.lowercased()
+            if lower.contains("headphone") ||
+               lower.contains("airpods") ||
+               lower.contains("buds") ||
+               lower.contains("earphones") {
+                symbolName = "headphones"
+            } else {
+                symbolName = "speaker.wave.2.fill"
+            }
+        } else {
+            symbolName = "speaker.wave.2.fill"
+        }
+
+        if #available(macOS 11.0, *) {
+            let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "SoundLab")
+            image?.isTemplate = true
+            button.image = image
+        }
     }
 
     public func updateStatusItemTitle() {
@@ -63,12 +89,18 @@ public final class StatusBarController: NSObject {
     @objc private func handleSelectOutput(_ sender: NSMenuItem) {
         guard let uid = sender.representedObject as? String else { return }
         try? deviceManager.setDefaultOutput(deviceUID: uid)
+        if let device = deviceManager.outputDevices.first(where: { $0.uid == uid }) {
+            notificationDispatcher.notifyDeviceSwitched(to: device)
+        }
         pulseStatusItem()
     }
 
     @objc private func handleSelectInput(_ sender: NSMenuItem) {
         guard let uid = sender.representedObject as? String else { return }
         try? deviceManager.setDefaultInput(deviceUID: uid)
+        if let device = deviceManager.inputDevices.first(where: { $0.uid == uid }) {
+            notificationDispatcher.notifyDeviceSwitched(to: device)
+        }
         pulseStatusItem()
     }
 

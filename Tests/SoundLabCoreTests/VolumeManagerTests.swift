@@ -88,13 +88,17 @@ private extension MockAudioHardwareService {
         }
 
         let tracker = CallbackTracker()
-        volumeManager.addVolumeChangeObserver { vol in
+        let token = volumeManager.addVolumeChangeObserver { vol in
             tracker.add(vol)
         }
 
         try volumeManager.setOutputVolume(0.7)
         try volumeManager.setOutputVolume(1.2) // clamps to 1.0
 
+        #expect(tracker.get() == [0.7, 1.0])
+
+        volumeManager.removeVolumeChangeObserver(id: token)
+        try volumeManager.setOutputVolume(0.4)
         #expect(tracker.get() == [0.7, 1.0])
     }
 }
