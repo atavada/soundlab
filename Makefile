@@ -1,4 +1,4 @@
-.PHONY: all build test bundle run clean
+.PHONY: all build test bundle run clean icon
 
 all: bundle
 
@@ -7,6 +7,9 @@ build:
 
 test:
 	swift test
+
+icon:
+	./scripts/generate-icon.sh
 
 bundle:
 	./scripts/bundle.sh

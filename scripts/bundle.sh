@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${ROOT_DIR}"
+
 APP_NAME="SoundLab"
 BUILD_DIR="build"
 APP_BUNDLE="${BUILD_DIR}/${APP_NAME}.app"
@@ -19,6 +23,17 @@ mkdir -p "${RESOURCES_DIR}"
 BIN_PATH=$(swift build -c release --show-bin-path)
 cp "${BIN_PATH}/SoundLabApp" "${MACOS_DIR}/${APP_NAME}"
 cp "Sources/SoundLabApp/Info.plist" "${CONTENTS_DIR}/Info.plist"
+
+ICON_SRC="Sources/SoundLabApp/Resources/AppIcon.icns"
+if [ ! -f "${ICON_SRC}" ]; then
+    echo "AppIcon.icns not found, generating..."
+    "${SCRIPT_DIR}/generate-icon.sh"
+fi
+
+if [ -f "${ICON_SRC}" ]; then
+    echo "Copying AppIcon.icns to bundle..."
+    cp "${ICON_SRC}" "${RESOURCES_DIR}/AppIcon.icns"
+fi
 
 echo "APPL????" > "${CONTENTS_DIR}/PkgInfo"
 

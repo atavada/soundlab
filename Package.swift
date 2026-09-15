@@ -26,7 +26,7 @@ let package = Package(
             name: "SoundLabApp",
             dependencies: ["SoundLabCore", "SoundLabUI"],
             path: "Sources/SoundLabApp",
-            exclude: ["Info.plist"]
+            exclude: ["Info.plist", "Resources"]
         ),
         .testTarget(
             name: "SoundLabCoreTests",

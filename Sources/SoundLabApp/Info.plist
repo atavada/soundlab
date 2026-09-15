@@ -18,6 +18,8 @@
     <string>11.0</string>
     <key>LSUIElement</key>
     <true/>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>SoundLab inspects audio input device names and scopes to allow switching input sources.</string>
 </dict>
