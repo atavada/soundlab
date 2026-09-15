@@ -4,8 +4,8 @@ import Foundation
 public final class DeviceObserver: @unchecked Sendable {
     private let hardwareService: AudioHardwareServiceProtocol
     private weak var deviceManager: DeviceManager?
-    private var listToken: AudioListenerToken?
-    private var defaultToken: AudioListenerToken?
+    private var listToken: AudioHardwareListenerToken?
+    private var defaultToken: AudioHardwareListenerToken?
     private let lock = NSLock()
 
     public init(hardwareService: AudioHardwareServiceProtocol, deviceManager: DeviceManager) {

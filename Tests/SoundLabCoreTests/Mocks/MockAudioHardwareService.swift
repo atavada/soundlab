@@ -10,6 +10,7 @@ public final class MockAudioHardwareService: AudioHardwareServiceProtocol, @unch
 
     private var deviceListListeners: [AudioListenerToken: AudioListenerBlock] = [:]
     private var defaultDeviceListeners: [AudioListenerToken: AudioListenerBlock] = [:]
+    private var volumeListeners: [AudioDeviceID: [AudioHardwareListenerToken: AudioListenerBlock]] = [:]
 
     public init() {}
 
@@ -137,6 +138,41 @@ public final class MockAudioHardwareService: AudioHardwareServiceProtocol, @unch
         lock.lock()
         defer { lock.unlock() }
         defaultDeviceListeners.removeAll()
+    }
+
+    @discardableResult
+    public func addVolumeChangeListener(deviceID: AudioDeviceID, block: @escaping AudioListenerBlock) throws -> AudioHardwareListenerToken {
+        lock.lock()
+        defer { lock.unlock() }
+        guard devices[deviceID] != nil else { throw SoundLabAudioError.deviceNotFound(id: deviceID) }
+        let token = UUID()
+        if volumeListeners[deviceID] == nil {
+            volumeListeners[deviceID] = [:]
+        }
+        volumeListeners[deviceID]?[token] = block
+        return token
+    }
+
+    public func removeVolumeChangeListener(token: AudioHardwareListenerToken) {
+        lock.lock()
+        defer { lock.unlock() }
+        for deviceID in volumeListeners.keys {
+            volumeListeners[deviceID]?.removeValue(forKey: token)
+        }
+    }
+
+    public func triggerVolumeChange(for deviceID: AudioDeviceID) {
+        lock.lock()
+        let listeners = Array(volumeListeners[deviceID]?.values ?? [:].values)
+        lock.unlock()
+        for listener in listeners { listener() }
+    }
+
+    public func triggerDefaultDeviceChange() {
+        lock.lock()
+        let listeners = Array(defaultDeviceListeners.values)
+        lock.unlock()
+        for listener in listeners { listener() }
     }
 
     public func triggerDeviceListChange() {

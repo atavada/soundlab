@@ -233,9 +233,16 @@ public final class CoreAudioHardwareService: AudioHardwareServiceProtocol, @unch
         guard status == noErr else { throw SoundLabAudioError.volumeNotSupported(id: id) }
     }
 
+    private struct VolumeListenerRecord {
+        let deviceID: AudioDeviceID
+        let address: AudioObjectPropertyAddress
+        let block: AudioObjectPropertyListenerBlock
+    }
+
     private let listenerLock = NSLock()
     private var deviceListListeners: [AudioListenerToken: AudioObjectPropertyListenerBlock] = [:]
     private var defaultDeviceListeners: [AudioListenerToken: AudioObjectPropertyListenerBlock] = [:]
+    private var volumeListeners: [AudioHardwareListenerToken: VolumeListenerRecord] = [:]
 
     @discardableResult
     public func addDeviceListChangeListener(block: @escaping AudioListenerBlock) throws -> AudioListenerToken {
@@ -352,6 +359,69 @@ public final class CoreAudioHardwareService: AudioHardwareServiceProtocol, @unch
         listenerLock.unlock()
         for token in tokens {
             try removeDefaultDeviceChangeListener(token: token)
+        }
+    }
+
+    @discardableResult
+    public func addVolumeChangeListener(deviceID: AudioDeviceID, block: @escaping AudioListenerBlock) throws -> AudioHardwareListenerToken {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyVolumeScalar,
+            mScope: kAudioObjectPropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let listenerBlock: AudioObjectPropertyListenerBlock = { _, _ in
+            block()
+        }
+
+        var status = AudioObjectAddPropertyListenerBlock(
+            deviceID,
+            &propertyAddress,
+            DispatchQueue.main,
+            listenerBlock
+        )
+        if status != noErr {
+            // Fallback to channel 1
+            propertyAddress.mElement = 1
+            status = AudioObjectAddPropertyListenerBlock(
+                deviceID,
+                &propertyAddress,
+                DispatchQueue.main,
+                listenerBlock
+            )
+        }
+        guard status == noErr else { throw SoundLabAudioError.halError(status) }
+
+        let token = UUID()
+        listenerLock.lock()
+        volumeListeners[token] = VolumeListenerRecord(deviceID: deviceID, address: propertyAddress, block: listenerBlock)
+        listenerLock.unlock()
+        return token
+    }
+
+    public func removeVolumeChangeListener(token: AudioHardwareListenerToken) {
+        listenerLock.lock()
+        guard let record = volumeListeners.removeValue(forKey: token) else {
+            listenerLock.unlock()
+            return
+        }
+        listenerLock.unlock()
+
+        var address = record.address
+        _ = AudioObjectRemovePropertyListenerBlock(
+            record.deviceID,
+            &address,
+            DispatchQueue.main,
+            record.block
+        )
+    }
+
+    public func removeVolumeChangeListener() {
+        listenerLock.lock()
+        let tokens = Array(volumeListeners.keys)
+        listenerLock.unlock()
+        for token in tokens {
+            removeVolumeChangeListener(token: token)
         }
     }
 }
