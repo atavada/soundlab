@@ -1,4 +1,7 @@
-import SoundLabCore
-import SoundLabUI
+// Sources/SoundLabApp/main.swift
+import AppKit
 
-print("SoundLab initialized")
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+app.run()
