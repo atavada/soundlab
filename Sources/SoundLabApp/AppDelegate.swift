@@ -18,6 +18,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         settingsManager = SettingsManager()
+        applyAppearance()
         hardwareService = CoreAudioHardwareService()
         volumeManager = VolumeManager(hardwareService: hardwareService, settingsManager: settingsManager)
         deviceManager = DeviceManager(hardwareService: hardwareService, volumeManager: volumeManager, settingsManager: settingsManager)
@@ -46,6 +47,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyManager.registerHotkeys()
 
         registerSleepWakeNotifications()
+    }
+
+    private func applyAppearance() {
+        GeneralPreferencesViewController.applyAppearance(settingsManager.appearanceMode)
     }
 
     private func openPreferences() {

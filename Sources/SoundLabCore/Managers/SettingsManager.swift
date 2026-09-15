@@ -1,5 +1,19 @@
 import Foundation
 
+public enum AppearanceMode: String, Sendable, CaseIterable {
+    case system = "system"
+    case dark = "dark"
+    case light = "light"
+
+    public var displayName: String {
+        switch self {
+        case .system: return "Follow System"
+        case .dark: return "Dark Mode"
+        case .light: return "Light Mode"
+        }
+    }
+}
+
 public final class SettingsManager: @unchecked Sendable {
     private let userDefaults: UserDefaults
     private let lock = NSLock()
@@ -10,6 +24,7 @@ public final class SettingsManager: @unchecked Sendable {
         static let showDeviceNameInMenuBar = "soundlab.showDeviceNameInMenuBar"
         static let showNotificationBanner = "soundlab.showNotificationBanner"
         static let hotkeysEnabled = "soundlab.hotkeysEnabled"
+        static let appearanceMode = "soundlab.appearanceMode"
     }
 
     public init(userDefaults: UserDefaults = .standard) {
@@ -102,6 +117,23 @@ public final class SettingsManager: @unchecked Sendable {
             lock.lock()
             defer { lock.unlock() }
             userDefaults.set(newValue, forKey: Keys.launchAtLogin)
+        }
+    }
+
+    public var appearanceMode: AppearanceMode {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let rawValue = userDefaults.string(forKey: Keys.appearanceMode),
+                  let mode = AppearanceMode(rawValue: rawValue) else {
+                return .system
+            }
+            return mode
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            userDefaults.set(newValue.rawValue, forKey: Keys.appearanceMode)
         }
     }
 }

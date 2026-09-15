@@ -68,4 +68,18 @@ import Foundation
         settings.launchAtLogin = true
         #expect(settings.launchAtLogin == true)
     }
+
+    @Test func testAppearanceModePersistence() {
+        let suiteName = "app-test-\(UUID().uuidString)"
+        let userDefaults = UserDefaults(suiteName: suiteName)!
+        defer { userDefaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsManager(userDefaults: userDefaults)
+        #expect(settings.appearanceMode == .system)
+
+        settings.appearanceMode = .dark
+        #expect(settings.appearanceMode == .dark)
+
+        settings.appearanceMode = .light
+        #expect(settings.appearanceMode == .light)
+    }
 }
