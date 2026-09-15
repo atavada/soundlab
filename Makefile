@@ -1,4 +1,4 @@
-.PHONY: all build test bundle run clean icon
+.PHONY: all build test bundle run clean icon dmg
 
 all: bundle
 
@@ -13,6 +13,9 @@ icon:
 
 bundle:
 	./scripts/bundle.sh
+
+dmg: bundle
+	./scripts/package-dmg.sh
 
 run: bundle
 	open build/SoundLab.app
