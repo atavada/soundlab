@@ -383,7 +383,8 @@ private final class StateBox<T>: @unchecked Sendable {
         let mixer = ProcessAudioMixer(
             tapService: mockTap,
             deviceManager: deviceManager,
-            settingsManager: settings
+            settingsManager: settings,
+            appInfoProvider: { _ in (name: "Spotify", bundleID: "com.spotify.client") }
         )
 
         mockTap.addProcess(pid: 1001, objectID: 50)
@@ -420,5 +421,50 @@ private final class StateBox<T>: @unchecked Sendable {
         #expect(mixer.processes.isEmpty)
         #expect(mockTap.destroyedTapIDs.count == 2)
         #expect(mockTap.runningIOAggregateIDs.isEmpty)
+    }
+
+    @available(macOS 14.2, *)
+    @Test func testDaemonAndDuplicateFiltering() throws {
+        let mockTap = MockProcessTapService()
+        let mockHW = MockAudioHardwareService()
+        mockHW.addMockDevice(id: 1, uid: "out-1", name: "Internal Speakers", scopes: [.output])
+        mockHW.defaultOutputID = 1
+
+        let settings = SettingsManager(userDefaults: UserDefaults(suiteName: "mixer-filter-\(UUID().uuidString)")!)
+        let volumeManager = VolumeManager(hardwareService: mockHW, settingsManager: settings)
+        let deviceManager = DeviceManager(hardwareService: mockHW, volumeManager: volumeManager, settingsManager: settings)
+        try deviceManager.refreshDevices()
+
+        let appInfoProvider: ProcessAppInfoProvider = { pid in
+            switch pid {
+            case 2001: return (name: "Chrome Main", bundleID: "com.google.Chrome")
+            case 2002: return (name: "Chrome Helper", bundleID: "com.google.Chrome") // duplicate bundle ID
+            case 2003: return (name: "SoundLab", bundleID: "com.atavada.SoundLab") // self bundle ID
+            case 2004: return (name: "   ", bundleID: "com.empty.name") // empty name
+            default: return nil // background daemons without GUI app info
+            }
+        }
+
+        let mixer = ProcessAudioMixer(
+            tapService: mockTap,
+            deviceManager: deviceManager,
+            settingsManager: settings,
+            appInfoProvider: appInfoProvider
+        )
+
+        mockTap.addProcess(pid: 2001, objectID: 60)
+        mockTap.addProcess(pid: 2002, objectID: 61)
+        mockTap.addProcess(pid: 2003, objectID: 62)
+        mockTap.addProcess(pid: 2004, objectID: 63)
+        mockTap.addProcess(pid: 9999, objectID: 64) // daemon (nil appInfo)
+
+        try mixer.refreshAudioProcesses()
+
+        // Only PID 2001 (Chrome Main) should be retained
+        #expect(mixer.processes.count == 1)
+        #expect(mixer.processes.first?.pid == 2001)
+        #expect(mixer.processes.first?.name == "Chrome Main")
+        #expect(mixer.activeTaps.count == 1)
+        #expect(mixer.activeTaps[2001] != nil)
     }
 }

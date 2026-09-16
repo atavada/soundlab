@@ -58,6 +58,11 @@ public final class DeviceManager: @unchecked Sendable {
                 continue
             }
 
+            // Filter out internal SoundLab aggregate tap devices
+            if uid.hasPrefix("SoundLab.") || name.hasPrefix("SoundLab-") {
+                continue
+            }
+
             if scopes.contains(.output) {
                 let isDef = (id == defOutID)
                 newOutputs.append(AudioDevice(id: id, uid: uid, name: name, scope: .output, isDefault: isDef))

@@ -10,11 +10,13 @@ public typealias ProcessAppInfoProvider = @Sendable (pid_t) -> (name: String, bu
 #if canImport(AppKit)
 public let defaultProcessAppInfoProvider: ProcessAppInfoProvider = { pid in
     guard let app = NSRunningApplication(processIdentifier: pid) else { return nil }
-    return (name: app.localizedName ?? "Process \(pid)", bundleID: app.bundleIdentifier)
+    guard app.activationPolicy == .regular else { return nil }
+    guard let name = app.localizedName, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+    return (name: name, bundleID: app.bundleIdentifier)
 }
 #else
 public let defaultProcessAppInfoProvider: ProcessAppInfoProvider = { pid in
-    return (name: "Process \(pid)", bundleID: nil)
+    return nil
 }
 #endif
 
@@ -100,16 +102,31 @@ public final class ProcessAudioMixer: @unchecked Sendable {
 
         var discovered: [DiscoveredProcess] = []
         var discoveredPIDs = Set<pid_t>()
+        var discoveredBundleIDs = Set<String>()
 
         for objID in objectIDs {
             guard let pid = try? tapService.getPID(for: objID) else { continue }
             if pid == selfPID { continue }
             guard !discoveredPIDs.contains(pid) else { continue }
-            discoveredPIDs.insert(pid)
 
-            let appInfo = appInfoProvider(pid)
-            let name = appInfo?.name ?? "Process \(pid)"
-            let bundleID = appInfo?.bundleID
+            // Skip processes without valid user-facing application metadata
+            guard let appInfo = appInfoProvider(pid) else { continue }
+            let name = appInfo.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            let bundleID = appInfo.bundleID
+
+            // Avoid self bundle
+            if let bID = bundleID, bID == Bundle.main.bundleIdentifier || bID == "com.atavada.SoundLab" {
+                continue
+            }
+
+            // Deduplicate multiple helper processes sharing the same bundle identifier
+            if let bID = bundleID, !bID.isEmpty {
+                guard !discoveredBundleIDs.contains(bID) else { continue }
+                discoveredBundleIDs.insert(bID)
+            }
+
+            discoveredPIDs.insert(pid)
 
             let savedVolume = bundleID.flatMap { settingsManager.getAppVolume(forBundleID: $0) }
             let volume = savedVolume ?? 1.0

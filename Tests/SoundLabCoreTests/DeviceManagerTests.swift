@@ -163,4 +163,24 @@ import Foundation
         // Device count should remain 2 because observer was stopped
         #expect(deviceManager.outputDevices.count == 2)
     }
+
+    @Test func testIgnoreInternalSoundLabAggregateDevices() throws {
+        let mock = MockAudioHardwareService()
+        mock.addMockDevice(id: 1, uid: "out-1", name: "Speakers", scopes: [.output])
+        mock.addMockDevice(id: 2, uid: "in-1", name: "Mic", scopes: [.input])
+        mock.addMockDevice(id: 3, uid: "SoundLab.Aggregate.12345", name: "SoundLab-12345", scopes: [.output, .input])
+        mock.addMockDevice(id: 4, uid: "some-device", name: "SoundLab-Tap", scopes: [.output])
+        mock.defaultOutputID = 1
+        mock.defaultInputID = 2
+
+        let settings = SettingsManager(userDefaults: UserDefaults(suiteName: "dev-test-\(UUID().uuidString)")!)
+        let volumeManager = VolumeManager(hardwareService: mock, settingsManager: settings)
+        let deviceManager = DeviceManager(hardwareService: mock, volumeManager: volumeManager, settingsManager: settings)
+        try deviceManager.refreshDevices()
+
+        #expect(deviceManager.outputDevices.count == 1)
+        #expect(deviceManager.outputDevices.first?.uid == "out-1")
+        #expect(deviceManager.inputDevices.count == 1)
+        #expect(deviceManager.inputDevices.first?.uid == "in-1")
+    }
 }
