@@ -193,4 +193,41 @@ import Testing
         #expect(mock.errorToThrow == nil)
         #expect(try mock.getAudioProcessObjectIDs().isEmpty)
     }
+
+    @available(macOS 14.2, *)
+    @Test func testCoreAudioProcessTapServiceLiveHAL() throws {
+        let service = CoreAudioProcessTapService()
+        let objectIDs = try service.getAudioProcessObjectIDs()
+        #expect(objectIDs.count >= 0)
+
+        if let first = objectIDs.first {
+            let pid = try service.getPID(for: first)
+            #expect(pid > 0)
+
+            let translatedID = try service.getProcessObjectID(for: pid)
+            #expect(translatedID == first)
+        }
+
+        #expect(throws: SoundLabAudioError.self) {
+            _ = try service.getProcessObjectID(for: 99_999_999)
+        }
+    }
+
+    @available(macOS 14.2, *)
+    @Test func testCoreAudioProcessTapServiceInvalidOperations() throws {
+        let service = CoreAudioProcessTapService()
+
+        #expect(throws: SoundLabAudioError.self) {
+            _ = try service.getPID(for: 0xDEADBEEF)
+        }
+
+        #expect(throws: SoundLabAudioError.self) {
+            let emptyDesc: [String: Any] = [:]
+            _ = try service.createAggregateDevice(description: emptyDesc as CFDictionary)
+        }
+
+        #expect(throws: SoundLabAudioError.self) {
+            _ = try service.createIOProc(aggregateID: 0xDEADBEEF) { _, _, _, _, _ in }
+        }
+    }
 }
