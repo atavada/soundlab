@@ -82,4 +82,25 @@ import Foundation
         settings.appearanceMode = .light
         #expect(settings.appearanceMode == .light)
     }
+
+    @Test func testAppVolumePersistence() {
+        let suiteName = "app-vol-\(UUID().uuidString)"
+        let userDefaults = UserDefaults(suiteName: suiteName)!
+        defer { userDefaults.removePersistentDomain(forName: suiteName) }
+
+        let settings = SettingsManager(userDefaults: userDefaults)
+        #expect(settings.getAppVolume(forBundleID: "com.spotify.client") == nil)
+
+        settings.saveAppVolume(0.65, forBundleID: "com.spotify.client")
+        #expect(settings.getAppVolume(forBundleID: "com.spotify.client") == 0.65)
+
+        settings.saveAppVolume(1.5, forBundleID: "com.spotify.client")
+        #expect(settings.getAppVolume(forBundleID: "com.spotify.client") == 1.0)
+
+        settings.saveAppVolume(-0.5, forBundleID: "com.spotify.client")
+        #expect(settings.getAppVolume(forBundleID: "com.spotify.client") == 0.0)
+
+        settings.removeAppVolume(forBundleID: "com.spotify.client")
+        #expect(settings.getAppVolume(forBundleID: "com.spotify.client") == nil)
+    }
 }

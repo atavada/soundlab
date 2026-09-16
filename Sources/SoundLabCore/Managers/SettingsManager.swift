@@ -20,6 +20,7 @@ public final class SettingsManager: @unchecked Sendable {
 
     private enum Keys {
         static let volumePrefix = "soundlab.vol."
+        static let appVolumePrefix = "soundlab.appvol."
         static let launchAtLogin = "soundlab.launchAtLogin"
         static let showDeviceNameInMenuBar = "soundlab.showDeviceNameInMenuBar"
         static let showNotificationBanner = "soundlab.showNotificationBanner"
@@ -60,6 +61,28 @@ public final class SettingsManager: @unchecked Sendable {
         for key in dict.keys where key.hasPrefix(Keys.volumePrefix) {
             userDefaults.removeObject(forKey: key)
         }
+    }
+
+    public func getAppVolume(forBundleID bundleID: String) -> Float? {
+        lock.lock()
+        defer { lock.unlock() }
+        let key = Keys.appVolumePrefix + bundleID
+        guard userDefaults.object(forKey: key) != nil else { return nil }
+        return userDefaults.float(forKey: key)
+    }
+
+    public func saveAppVolume(_ volume: Float, forBundleID bundleID: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        let key = Keys.appVolumePrefix + bundleID
+        userDefaults.set(min(max(volume, 0.0), 1.0), forKey: key)
+    }
+
+    public func removeAppVolume(forBundleID bundleID: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        let key = Keys.appVolumePrefix + bundleID
+        userDefaults.removeObject(forKey: key)
     }
 
     public var showDeviceNameInMenuBar: Bool {

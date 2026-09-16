@@ -22,5 +22,7 @@
     <string>AppIcon</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>SoundLab inspects audio input device names and scopes to allow switching input sources.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>SoundLab requires system audio recording permission to route and adjust volume for individual applications.</string>
 </dict>
 </plist>
