@@ -8,10 +8,10 @@
 |---|---|
 | **Project/Feature Name** | SoundLab |
 | **Author** | Ardhatavada |
-| **Status** | Complete — v1.0 Released |
+| **Status** | v1.0.0-beta.2 Released |
 | **Date** | September 2026 |
-| **Target Release** | v1.0 — Q4 2026 |
-| **Platform** | macOS 11.0+ (Intel & Apple Silicon) |
+| **Target Release** | v1.0.0-beta.2 — September 2026 |
+| **Platform** | macOS 11.0+ (Device Switching), macOS 14.2+ (Per-App Volume Mixing) |
 | **Language** | Swift 6.0 / AppKit |
 
 ---
@@ -55,6 +55,9 @@ macOS exposes audio device switching through a deep System Settings path. Users 
 - Polished menubar UI with dark/light mode support
 - Preferences window for basic settings
 - Keyboard shortcut support for quick device switching
+- Per-application audio volume mixing (`v1.0.0-beta.2`): individual volume sliders (0–100%) and mute toggles for active audio-emitting applications
+- CoreAudio Process Tap engine (`v1.0.0-beta.2`): `CATapDescription` with `.mutedWhenTapped` and lock-free real-time DSP gain scaling
+- Per-app volume persistence in `UserDefaults` by bundle identifier (`v1.0.0-beta.2`)
 
 ### Out of Scope (Non-Goals)
 - Audio effects (EQ, boost, compression, reverb)
@@ -128,6 +131,20 @@ macOS exposes audio device switching through a deep System Settings path. Users 
 - [x] Menu updates in real-time when devices are plugged/unplugged
 - [x] Menubar shows current device name as title (truncated if too long)
 
+### User Story 6: Per-App Volume Mixing (v1.0.0-beta.2)
+**As a** user running multiple applications with audio output,  
+**I want to** adjust the volume of individual applications or mute them independently in the menubar menu,  
+**So that** I can balance audio levels (e.g. lower music while on a call) without changing system master volume.
+
+**Acceptance Criteria:**
+- [x] Active audio-emitting applications appear under "Applications" section in menubar menu (macOS 14.2+)
+- [x] Each application displays its running icon, display name, volume slider (0–100%), and percentage readout
+- [x] Adjusting app volume slider scales process audio gain in real-time
+- [x] Audio gain scaling executed via lock-free, allocation-free CoreAudio IOProc callback
+- [x] Per-app volume settings persist across app relaunches by bundle identifier in `UserDefaults`
+- [x] Terminated applications automatically clean up taps and menu items via `NSWorkspace` observation
+- [x] Output device changes seamlessly teardown and rebind taps to active output device
+
 ---
 
 ## 6. User Experience (UX) & Design
@@ -192,25 +209,32 @@ User selects "Preferences…" from menubar menu or presses ⌘,
 ### Architecture Overview
 ```
 SoundLab (AppKit)
-├── AppDelegate          → NSApplication delegate, menubar setup
-├── StatusBarManager     → NSStatusItem lifecycle, menu construction
-├── DeviceManager        → AVAudioDevice enumeration, switching logic
-├── VolumeController     → System volume + per-device volume persistence
-├── PreferencesManager   → UserDefaults wrapper, settings read/write
-├── ShortcutManager      → NSEvent monitor for global keyboard shortcuts
-├── DeviceObserver       → NSPointerArray / notifications for hot-plug events
-└── PreferencesWindowController → NSWindowController for settings UI
+├── AppDelegate                → NSApplication delegate, menubar setup, lifecycle
+├── StatusBarController        → NSStatusItem lifecycle, menu construction
+├── MenuBuilder                → Dynamic menu builder (devices, sliders, apps)
+├── VolumeSliderMenuItem       → Master volume slider with live percentage & keyboard nav
+├── AppVolumeMenuItem          → Per-app volume slider, icon, mute toggle (macOS 14.2+)
+├── DeviceManager              → CoreAudio HAL device enumeration and switching
+├── VolumeManager              → System volume + per-device volume persistence
+├── ProcessAudioMixer          → Orchestration of per-app taps & workspace lifecycle (macOS 14.2+)
+├── ProcessTapController       → Lock-free real-time IOProc DSP gain scaling (macOS 14.2+)
+├── CoreAudioProcessTapService → CATapDescription & private aggregate device manager (macOS 14.2+)
+├── SettingsManager            → UserDefaults wrapper, device & per-app volume persistence
+├── CarbonHotkeyManager        → HIToolbox global shortcuts (RegisterEventHotKey)
+├── DeviceObserver             → CoreAudio HAL property listeners for hot-plug events
+└── PreferencesWindowController→ Tabbed NSWindowController for settings UI
 ```
 
 ### Key Frameworks
 | Framework | Usage |
 |---|---|
 | `AppKit` | UI — menubar, windows, controls |
-| `AVFoundation` / `CoreAudio` | `AVAudioDevice` for device enumeration and switching |
+| `CoreAudio` (HAL) | Device enumeration, switching, property listeners |
+| `CoreAudio` (macOS 14.2+) | `CATapDescription`, `AudioHardwareCreateProcessTap` for per-app audio tap |
 | `Foundation` | `UserDefaults`, `NotificationCenter`, data models |
-| `ServiceManagement` | Launch at login (`SMLoginItemSetEnabled`) |
-| `Carbon` (optional) | Global keyboard event taps for shortcuts |
-| `Combine` | Reactive state updates for UI binding |
+| `ServiceManagement` | Launch at login (`SMAppService`) |
+| `Carbon` | Global keyboard shortcuts (`RegisterEventHotKey`) |
+| `UserNotifications` | Native notification dispatch on device change |
 
 ### Data Model
 ```swift
@@ -243,8 +267,8 @@ struct AppSettings {
 - No Core Data, no SQLite — too heavy for this scope
 
 ### Permission Requirements
-- `NSSpeechRecognitionUsageDescription` — n/a
-- `NSMicrophoneUsageDescription` — Required (input device switching)
+- `NSAudioCaptureUsageDescription` — Required on macOS 14.2+ (System audio recording permission for process audio tap gain scaling)
+- `NSMicrophoneUsageDescription` — Required (input device switching and enumeration)
 - `NSBluetoothAlwaysUsageDescription` — Required if Bluetooth devices present
 - `NSAppleMusicUsageDescription` — n/a
 - App must be **notarized** if distributed outside App Store
@@ -311,6 +335,10 @@ struct AppSettings {
 ---
 
 ## Appendix
+
+### Delivered Milestones
+- **v1.0.0-beta.1** (September 2026): Core audio output/input switching, per-device volume memory, bidirectional volume sync, Carbon hotkeys, dark mode menu bar UI, Preferences window, login item integration, DMG release pipeline.
+- **v1.0.0-beta.2** (September 2026): Per-application audio volume mixing (macOS 14.2+), `CATapDescription` with `.mutedWhenTapped`, private aggregate device routing, lock-free real-time IOProc DSP gain scaling, per-app volume persistence in `UserDefaults`, `NSWorkspace` app lifecycle tracking, TCC system audio permission handling.
 
 ### Future Enhancements (Phase 2+)
 - Audio effects (EQ, bass boost, noise gate)
