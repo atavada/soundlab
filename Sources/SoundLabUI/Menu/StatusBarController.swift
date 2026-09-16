@@ -8,18 +8,21 @@ public final class StatusBarController: NSObject {
     private let volumeManager: VolumeManager
     private let settingsManager: SettingsManager
     private let notificationDispatcher: NotificationDispatcher
+    private var processMixer: AnyObject?
     public var onOpenPreferences: (() -> Void)?
 
     public init(
         deviceManager: DeviceManager,
         volumeManager: VolumeManager,
         settingsManager: SettingsManager,
-        notificationDispatcher: NotificationDispatcher
+        notificationDispatcher: NotificationDispatcher,
+        processMixer: AnyObject? = nil
     ) {
         self.deviceManager = deviceManager
         self.volumeManager = volumeManager
         self.settingsManager = settingsManager
         self.notificationDispatcher = notificationDispatcher
+        self.processMixer = processMixer
         super.init()
         setupStatusItem()
         rebuildMenu()
@@ -29,6 +32,16 @@ public final class StatusBarController: NSObject {
                 self?.rebuildMenu()
                 self?.updateStatusItemIcon()
                 self?.updateStatusItemTitle()
+            }
+        }
+
+        if #available(macOS 14.2, *) {
+            if let mixer = processMixer as? ProcessAudioMixer {
+                mixer.addChangeListener { [weak self] in
+                    DispatchQueue.main.async {
+                        self?.rebuildMenu()
+                    }
+                }
             }
         }
     }
@@ -78,6 +91,7 @@ public final class StatusBarController: NSObject {
         statusItem?.menu = MenuBuilder.buildMenu(
             deviceManager: deviceManager,
             volumeManager: volumeManager,
+            processMixer: processMixer,
             target: self,
             selectOutputAction: #selector(handleSelectOutput(_:)),
             selectInputAction: #selector(handleSelectInput(_:)),

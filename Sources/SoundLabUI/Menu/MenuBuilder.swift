@@ -6,6 +6,7 @@ public final class MenuBuilder {
     public static func buildMenu(
         deviceManager: DeviceManager,
         volumeManager: VolumeManager,
+        processMixer: AnyObject? = nil,
         target: AnyObject,
         selectOutputAction: Selector,
         selectInputAction: Selector,
@@ -36,6 +37,30 @@ public final class MenuBuilder {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Section: Applications (Per-App Volume)
+        let appsHeader = NSMenuItem(title: "APPLICATIONS", action: nil, keyEquivalent: "")
+        appsHeader.isEnabled = false
+        menu.addItem(appsHeader)
+
+        if #available(macOS 14.2, *) {
+            if let mixer = processMixer as? ProcessAudioMixer, !mixer.processes.isEmpty {
+                for process in mixer.processes {
+                    let appItem = AppVolumeMenuItem(process: process, mixer: mixer)
+                    menu.addItem(appItem)
+                }
+            } else {
+                let noAppsItem = NSMenuItem(title: "No active audio applications", action: nil, keyEquivalent: "")
+                noAppsItem.isEnabled = false
+                menu.addItem(noAppsItem)
+            }
+        } else {
+            let unsupportedItem = NSMenuItem(title: "Per-app volume requires macOS 14.2+", action: nil, keyEquivalent: "")
+            unsupportedItem.isEnabled = false
+            menu.addItem(unsupportedItem)
+        }
+
+        menu.addItem(NSMenuItem.separator())
+
         // Section: Input Devices
         let inputHeader = NSMenuItem(title: "INPUT DEVICES", action: nil, keyEquivalent: "")
         inputHeader.isEnabled = false
@@ -61,5 +86,26 @@ public final class MenuBuilder {
         menu.addItem(quitItem)
 
         return menu
+    }
+
+    public static func buildMenu(
+        deviceManager: DeviceManager,
+        volumeManager: VolumeManager,
+        target: AnyObject,
+        selectOutputAction: Selector,
+        selectInputAction: Selector,
+        openPreferencesAction: Selector,
+        quitAction: Selector
+    ) -> NSMenu {
+        buildMenu(
+            deviceManager: deviceManager,
+            volumeManager: volumeManager,
+            processMixer: nil,
+            target: target,
+            selectOutputAction: selectOutputAction,
+            selectInputAction: selectInputAction,
+            openPreferencesAction: openPreferencesAction,
+            quitAction: quitAction
+        )
     }
 }

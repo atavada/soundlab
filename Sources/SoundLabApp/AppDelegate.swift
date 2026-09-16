@@ -15,6 +15,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager: CarbonHotkeyManager!
     private var preferencesWindowController: PreferencesWindowController?
     private var sleepWakeObserver: (any NSObjectProtocol)?
+    private var processTapService: AnyObject?
+    private var processMixer: AnyObject?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         settingsManager = SettingsManager()
@@ -28,11 +30,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         try? deviceManager.refreshDevices()
         deviceObserver.startObserving()
 
+        if #available(macOS 14.2, *) {
+            let tapService = CoreAudioProcessTapService()
+            self.processTapService = tapService
+            let mixer = ProcessAudioMixer(
+                tapService: tapService,
+                deviceManager: deviceManager,
+                settingsManager: settingsManager
+            )
+            self.processMixer = mixer
+            try? mixer.refreshAudioProcesses()
+        }
+
         statusBarController = StatusBarController(
             deviceManager: deviceManager,
             volumeManager: volumeManager,
             settingsManager: settingsManager,
-            notificationDispatcher: notificationDispatcher
+            notificationDispatcher: notificationDispatcher,
+            processMixer: processMixer
         )
 
         statusBarController.onOpenPreferences = { [weak self] in
@@ -76,6 +91,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
+        if #available(macOS 14.2, *) {
+            (processMixer as? ProcessAudioMixer)?.invalidate()
+        }
         hotkeyManager.unregisterHotkeys()
         deviceObserver.stopObserving()
         if let observer = sleepWakeObserver {
