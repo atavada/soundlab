@@ -86,7 +86,7 @@ public final class VolumeSliderMenuItem: NSMenuItem, @unchecked Sendable {
     }
 
     private func setupView() {
-        let container = VolumeSliderContainerView(frame: NSRect(x: 0, y: 0, width: 220, height: 32))
+        let container = VolumeSliderContainerView(frame: NSRect(x: 0, y: 0, width: 280, height: 32))
         container.slider = slider
 
         iconView.frame = NSRect(x: 14, y: 8, width: 16, height: 16)
@@ -94,7 +94,7 @@ public final class VolumeSliderMenuItem: NSMenuItem, @unchecked Sendable {
             iconView.image = NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: "Volume")
         }
 
-        slider.frame = NSRect(x: 36, y: 6, width: 125, height: 20)
+        slider.frame = NSRect(x: 36, y: 6, width: 185, height: 20)
         slider.minValue = 0.0
         slider.maxValue = 1.0
         slider.isContinuous = true
@@ -102,9 +102,10 @@ public final class VolumeSliderMenuItem: NSMenuItem, @unchecked Sendable {
         slider.target = self
         slider.action = #selector(sliderMoved(_:))
 
-        percentageLabel.frame = NSRect(x: 168, y: 6, width: 45, height: 18)
+        percentageLabel.frame = NSRect(x: 226, y: 6, width: 40, height: 18)
         percentageLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         percentageLabel.textColor = .secondaryLabelColor
+        percentageLabel.alignment = .right
 
         container.addSubview(iconView)
         container.addSubview(slider)

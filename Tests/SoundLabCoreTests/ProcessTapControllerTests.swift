@@ -98,6 +98,64 @@ import Testing
         #expect(outRight == [-0.5, -0.25])
     }
 
+    @available(macOS 14.2, *)
+    @Test func testAudioBufferTailZeroedWhenInputShorterThanOutput() {
+        var inSamples: [Float] = [1.0, 0.5]
+        var outSamples: [Float] = [9.0, 9.0, 9.0, 9.0]
+
+        withSingleBufferABL(samples: &inSamples) { inABL in
+            withSingleBufferABL(samples: &outSamples) { outABL in
+                ProcessTapController.processAudioBufferList(
+                    input: UnsafePointer(inABL),
+                    output: outABL,
+                    volume: 0.5
+                )
+            }
+        }
+
+        #expect(outSamples == [0.5, 0.25, 0.0, 0.0])
+    }
+
+    @available(macOS 14.2, *)
+    @Test func testAudioBufferSurplusOutputChannelsZeroed() {
+        var inSamples: [Float] = [1.0, 0.5]
+        var outLeft: [Float] = [0.0, 0.0]
+        var outRight: [Float] = [9.0, 9.0]
+
+        withSingleBufferABL(samples: &inSamples) { inABL in
+            withDualBufferABL(left: &outLeft, right: &outRight) { outABL in
+                ProcessTapController.processAudioBufferList(
+                    input: UnsafePointer(inABL),
+                    output: outABL,
+                    volume: 0.5
+                )
+            }
+        }
+
+        #expect(outLeft == [0.5, 0.25])
+        #expect(outRight == [0.0, 0.0])
+    }
+
+    @available(macOS 14.2, *)
+    @Test func testAudioBufferEmptyInputZeroesOutput() {
+        let dummyBuffer = AudioBuffer(mNumberChannels: 0, mDataByteSize: 0, mData: nil)
+        var emptyABL = AudioBufferList(mNumberBuffers: 0, mBuffers: dummyBuffer)
+
+        var outSamples: [Float] = [9.0, 9.0, 9.0, 9.0]
+
+        withSingleBufferABL(samples: &outSamples) { outABL in
+            withUnsafePointer(to: &emptyABL) { ablPtr in
+                ProcessTapController.processAudioBufferList(
+                    input: ablPtr,
+                    output: outABL,
+                    volume: 0.5
+                )
+            }
+        }
+
+        #expect(outSamples == [0.0, 0.0, 0.0, 0.0])
+    }
+
     // MARK: - Volume & Mute Control Tests
 
     @available(macOS 14.2, *)

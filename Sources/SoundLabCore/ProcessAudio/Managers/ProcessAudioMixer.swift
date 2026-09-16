@@ -189,7 +189,6 @@ public final class ProcessAudioMixer: @unchecked Sendable {
 
     public func setVolume(_ volume: Float, forPID pid: pid_t) throws {
         let clamped = min(max(volume, 0.0), 1.0)
-        let listeners: [@Sendable () -> Void]
         let tap: ProcessTapController?
         let bundleID: String?
 
@@ -202,21 +201,15 @@ public final class ProcessAudioMixer: @unchecked Sendable {
         _processes[index].volume = clamped
         bundleID = _processes[index].bundleID
         tap = _activeTaps[pid]
-        listeners = _changeListeners
         lock.unlock()
 
         tap?.setVolume(clamped)
         if let bundleID = bundleID {
             settingsManager.saveAppVolume(clamped, forBundleID: bundleID)
         }
-
-        for listener in listeners {
-            listener()
-        }
     }
 
     public func toggleMute(forPID pid: pid_t) throws {
-        let listeners: [@Sendable () -> Void]
         let tap: ProcessTapController?
         let newMuted: Bool
 
@@ -229,14 +222,9 @@ public final class ProcessAudioMixer: @unchecked Sendable {
         newMuted = !_processes[index].isMuted
         _processes[index].isMuted = newMuted
         tap = _activeTaps[pid]
-        listeners = _changeListeners
         lock.unlock()
 
         tap?.setMuted(newMuted)
-
-        for listener in listeners {
-            listener()
-        }
     }
 
     public func addChangeListener(_ listener: @escaping @Sendable () -> Void) {
@@ -323,6 +311,7 @@ public final class ProcessAudioMixer: @unchecked Sendable {
         let newUID = deviceManager.defaultOutputDevice?.uid
         var tapsToRecreate: [(tap: ProcessTapController, uid: String)] = []
         var tapsToActivate: [(pid: pid_t, objID: AudioObjectID, volume: Float, uid: String)] = []
+        var tapsToInvalidate: [ProcessTapController] = []
         let listeners: [@Sendable () -> Void]
 
         lock.lock()
@@ -342,9 +331,16 @@ public final class ProcessAudioMixer: @unchecked Sendable {
                     tapsToActivate.append((pid: proc.pid, objID: proc.objectID, volume: proc.volume, uid: newUID))
                 }
             }
+        } else {
+            tapsToInvalidate = Array(_activeTaps.values)
+            _activeTaps.removeAll()
         }
         listeners = _changeListeners
         lock.unlock()
+
+        for tap in tapsToInvalidate {
+            tap.invalidate()
+        }
 
         for item in tapsToRecreate {
             try? item.tap.recreate(newOutputUID: item.uid)

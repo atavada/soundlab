@@ -2,7 +2,7 @@ import AppKit
 import SoundLabCore
 
 @MainActor
-public final class StatusBarController: NSObject {
+public final class StatusBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private let deviceManager: DeviceManager
     private let volumeManager: VolumeManager
@@ -48,6 +48,7 @@ public final class StatusBarController: NSObject {
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem?.menu?.delegate = self
         updateStatusItemIcon()
         updateStatusItemTitle()
     }
@@ -88,7 +89,7 @@ public final class StatusBarController: NSObject {
     }
 
     public func rebuildMenu() {
-        statusItem?.menu = MenuBuilder.buildMenu(
+        let menu = MenuBuilder.buildMenu(
             deviceManager: deviceManager,
             volumeManager: volumeManager,
             processMixer: processMixer,
@@ -98,6 +99,16 @@ public final class StatusBarController: NSObject {
             openPreferencesAction: #selector(handleOpenPreferences),
             quitAction: #selector(handleQuit)
         )
+        menu.delegate = self
+        statusItem?.menu = menu
+    }
+
+    // MARK: - NSMenuDelegate
+
+    public func menuWillOpen(_ menu: NSMenu) {
+        if #available(macOS 14.2, *) {
+            try? (processMixer as? ProcessAudioMixer)?.refreshAudioProcesses()
+        }
     }
 
     @objc private func handleSelectOutput(_ sender: NSMenuItem) {

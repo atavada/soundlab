@@ -88,13 +88,38 @@ public final class ProcessTapController: @unchecked Sendable {
         let clampedVolume = min(max(volume, 0.0), 1.0)
         let inBuffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input))
         let outBuffers = UnsafeMutableAudioBufferListPointer(output)
+
+        guard inBuffers.count > 0 else {
+            for b in 0..<outBuffers.count {
+                let outBuffer = outBuffers[b]
+                if let outData = outBuffer.mData, outBuffer.mDataByteSize > 0 {
+                    memset(outData, 0, Int(outBuffer.mDataByteSize))
+                }
+            }
+            return
+        }
+
         let count = min(inBuffers.count, outBuffers.count)
 
         for b in 0..<count {
             let inBuffer = inBuffers[b]
             let outBuffer = outBuffers[b]
-            guard let inData = inBuffer.mData, let outData = outBuffer.mData else { continue }
-            let byteCount = min(inBuffer.mDataByteSize, outBuffer.mDataByteSize)
+            guard let outData = outBuffer.mData else { continue }
+            let outByteSize = outBuffer.mDataByteSize
+
+            guard let inData = inBuffer.mData else {
+                if outByteSize > 0 {
+                    memset(outData, 0, Int(outByteSize))
+                }
+                continue
+            }
+
+            let byteCount = min(inBuffer.mDataByteSize, outByteSize)
+
+            if byteCount < outByteSize {
+                memset(outData.advanced(by: Int(byteCount)), 0, Int(outByteSize - byteCount))
+            }
+
             guard byteCount > 0 else { continue }
 
             if clampedVolume == 0.0 {
@@ -117,6 +142,15 @@ public final class ProcessTapController: @unchecked Sendable {
             while i < sampleCount {
                 outSamples[i] = inSamples[i] * clampedVolume
                 i &+= 1
+            }
+        }
+
+        if outBuffers.count > count {
+            for b in count..<outBuffers.count {
+                let outBuffer = outBuffers[b]
+                if let outData = outBuffer.mData, outBuffer.mDataByteSize > 0 {
+                    memset(outData, 0, Int(outBuffer.mDataByteSize))
+                }
             }
         }
     }

@@ -137,7 +137,8 @@ private final class StateBox<T>: @unchecked Sendable {
 
         try mixer.setVolume(0.42, forPID: 1001)
 
-        #expect(countBox.value == 1)
+        // Sliders update locally without triggering menu rebuild listener
+        #expect(countBox.value == 0)
         #expect(mixer.processes.first { $0.pid == 1001 }?.volume == 0.42)
         #expect(mixer.activeTaps[1001]?.volume == 0.42)
         #expect(mixer.activeTaps[1001]?.currentGain == 0.42)
@@ -213,6 +214,48 @@ private final class StateBox<T>: @unchecked Sendable {
         if let newAggID = mixer.activeTaps[1001]?.aggregateID {
             #expect(mockTap.runningIOAggregateIDs.contains(newAggID))
         }
+    }
+
+    @available(macOS 14.2, *)
+    @Test func testOutputDeviceDisappearingInvalidatesActiveTaps() throws {
+        let fixture = try makeMixerFixture()
+        let mixer = fixture.mixer
+        let mockTap = fixture.mockTap
+        let mockHW = fixture.mockHW
+        let deviceManager = fixture.deviceManager
+
+        mockTap.addProcess(pid: 1001, objectID: 50)
+        try mixer.refreshAudioProcesses()
+
+        #expect(mixer.activeTaps.count == 1)
+        guard let tapID = mixer.activeTaps[1001]?.tapID else {
+            Issue.record("Expected tapID for PID 1001")
+            return
+        }
+
+        // Output disappears (unplugged)
+        mockHW.devices.removeAll()
+        mockHW.defaultOutputID = 0
+        try deviceManager.refreshDevices()
+
+        // Active taps must be invalidated and cleared
+        #expect(mixer.activeTaps.isEmpty)
+        #expect(mockTap.destroyedTapIDs.contains(tapID))
+        #expect(mockTap.runningIOAggregateIDs.isEmpty)
+
+        // Process models remain
+        #expect(mixer.processes.count == 1)
+
+        // Output reappears
+        mockHW.addMockDevice(id: 1, uid: "out-restored", name: "Internal Speakers", scopes: [.output])
+        mockHW.defaultOutputID = 1
+        try deviceManager.refreshDevices()
+
+        #expect(mixer.activeTaps.count == 1)
+        #expect(mixer.activeTaps[1001]?.outputUID == "out-restored")
+        #expect(mixer.activeTaps[1001]?.tapID != tapID)
+        #expect(mockTap.destroyedTapIDs.contains(tapID))
+        #expect(mockTap.createdTaps.count == 1)
     }
 
     // MARK: - Termination Teardown
