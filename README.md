@@ -148,4 +148,5 @@ The compressed disk image is generated at `build/SoundLab-1.0.0.dmg`.
 
 ## License
 
-MIT License. Copyright (c) 2026 Ardhatavada.
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+
