@@ -4,20 +4,67 @@ import Foundation
 #if canImport(AppKit)
 import AppKit
 #endif
+#if canImport(Darwin)
+import Darwin
+#endif
 
-public typealias ProcessAppInfoProvider = @Sendable (pid_t) -> (name: String, bundleID: String?)?
+public struct ProcessAppInfo: Sendable, Equatable {
+    public let pid: pid_t
+    public let name: String
+    public let bundleID: String?
 
-#if canImport(AppKit)
-public let defaultProcessAppInfoProvider: ProcessAppInfoProvider = { pid in
-    guard let app = NSRunningApplication(processIdentifier: pid) else { return nil }
-    guard app.activationPolicy == .regular else { return nil }
-    guard let name = app.localizedName, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-    return (name: name, bundleID: app.bundleIdentifier)
+    public init(pid: pid_t, name: String, bundleID: String? = nil) {
+        self.pid = pid
+        self.name = name
+        self.bundleID = bundleID
+    }
 }
-#else
+
+public typealias ProcessAppInfoProvider = @Sendable (pid_t) -> ProcessAppInfo?
+
+#if canImport(AppKit) && canImport(Darwin)
+private func getParentPID(pid: pid_t) -> pid_t? {
+    var info = proc_bsdinfo()
+    let size = Int32(MemoryLayout<proc_bsdinfo>.stride)
+    let ret = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size)
+    if ret <= 0 { return nil }
+    return pid_t(info.pbi_ppid)
+}
+
 public let defaultProcessAppInfoProvider: ProcessAppInfoProvider = { pid in
+    // 1. Direct regular app check
+    if let app = NSRunningApplication(processIdentifier: pid), app.activationPolicy == .regular {
+        guard let name = app.localizedName, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return ProcessAppInfo(pid: app.processIdentifier, name: name, bundleID: app.bundleIdentifier)
+    }
+
+    // 2. Parent PID traversal to find regular ancestor app (for Chromium/Electron/WebKit child helpers)
+    var currentPID = pid
+    var depth = 0
+    while depth < 8 {
+        guard let parentPID = getParentPID(pid: currentPID), parentPID > 1, parentPID != currentPID else { break }
+        if let parentApp = NSRunningApplication(processIdentifier: parentPID), parentApp.activationPolicy == .regular {
+            guard let name = parentApp.localizedName, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return ProcessAppInfo(pid: parentApp.processIdentifier, name: name, bundleID: parentApp.bundleIdentifier)
+        }
+        currentPID = parentPID
+        depth += 1
+    }
+
+    // 3. Bundle identifier prefix match fallback (e.g. for helpers launched via launchd/XPC)
+    if let helperApp = NSRunningApplication(processIdentifier: pid), let helperBundle = helperApp.bundleIdentifier {
+        for regularApp in NSWorkspace.shared.runningApplications where regularApp.activationPolicy == .regular {
+            if let regBundle = regularApp.bundleIdentifier, !regBundle.isEmpty, helperBundle.hasPrefix(regBundle) {
+                guard let name = regularApp.localizedName, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                return ProcessAppInfo(pid: regularApp.processIdentifier, name: name, bundleID: regularApp.bundleIdentifier)
+            }
+        }
+    }
+
     return nil
 }
+#else
+public let defaultProcessAppInfoProvider: ProcessAppInfoProvider = { _ in nil }
 #endif
 
 @available(macOS 14.2, *)
@@ -92,115 +139,111 @@ public final class ProcessAudioMixer: @unchecked Sendable {
         let selfPID = ProcessInfo.processInfo.processIdentifier
         let outputUID = deviceManager.defaultOutputDevice?.uid
 
-        struct DiscoveredProcess {
+        struct DiscoveredApp {
             let pid: pid_t
-            let objectID: AudioObjectID
             let name: String
             let bundleID: String?
-            let initialVolume: Float
+            var objectIDs: [AudioObjectID]
         }
 
-        var discovered: [DiscoveredProcess] = []
-        var discoveredPIDs = Set<pid_t>()
-        var discoveredBundleIDs = Set<String>()
+        var discoveredMap: [pid_t: DiscoveredApp] = [:]
 
         for objID in objectIDs {
             guard let pid = try? tapService.getPID(for: objID) else { continue }
             if pid == selfPID { continue }
-            guard !discoveredPIDs.contains(pid) else { continue }
 
-            // Skip processes without valid user-facing application metadata
             guard let appInfo = appInfoProvider(pid) else { continue }
-            let name = appInfo.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { continue }
-            let bundleID = appInfo.bundleID
-
-            // Avoid self bundle
-            if let bID = bundleID, bID == Bundle.main.bundleIdentifier || bID == "com.atavada.SoundLab" {
+            if appInfo.pid == selfPID { continue }
+            let trimmedName = appInfo.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else { continue }
+            if let bID = appInfo.bundleID, bID == Bundle.main.bundleIdentifier || bID == "com.atavada.SoundLab" {
                 continue
             }
 
-            // Deduplicate multiple helper processes sharing the same bundle identifier
-            if let bID = bundleID, !bID.isEmpty {
-                guard !discoveredBundleIDs.contains(bID) else { continue }
-                discoveredBundleIDs.insert(bID)
+            if var existing = discoveredMap[appInfo.pid] {
+                if !existing.objectIDs.contains(objID) {
+                    existing.objectIDs.append(objID)
+                    discoveredMap[appInfo.pid] = existing
+                }
+            } else {
+                discoveredMap[appInfo.pid] = DiscoveredApp(
+                    pid: appInfo.pid,
+                    name: trimmedName,
+                    bundleID: appInfo.bundleID,
+                    objectIDs: [objID]
+                )
             }
-
-            discoveredPIDs.insert(pid)
-
-            let savedVolume = bundleID.flatMap { settingsManager.getAppVolume(forBundleID: $0) }
-            let volume = savedVolume ?? 1.0
-
-            discovered.append(DiscoveredProcess(
-                pid: pid,
-                objectID: objID,
-                name: name,
-                bundleID: bundleID,
-                initialVolume: volume
-            ))
         }
 
         var tapsToInvalidate: [ProcessTapController] = []
-        var listeners: [@Sendable () -> Void] = []
+        var tapsToActivate: [ProcessTapController] = []
 
         lock.lock()
         _currentOutputUID = outputUID
 
-        // 1. Remove taps for processes no longer present
+        // 1. Remove taps for apps no longer present
         for (pid, tap) in _activeTaps {
-            if !discoveredPIDs.contains(pid) {
+            if discoveredMap[pid] == nil {
                 _activeTaps.removeValue(forKey: pid)
                 tapsToInvalidate.append(tap)
             }
         }
 
-        // 2. Instantiate and activate taps for new processes
-        for item in discovered {
-            if _activeTaps[item.pid] == nil, let outUID = outputUID {
+        // 2. Update existing taps or instantiate new taps
+        for (pid, appData) in discoveredMap {
+            if let existingTap = _activeTaps[pid] {
+                try? existingTap.updateProcessObjectIDs(appData.objectIDs)
+            } else if let outUID = outputUID {
+                let savedVolume = appData.bundleID.flatMap { settingsManager.getAppVolume(forBundleID: $0) }
+                let volume = savedVolume ?? 1.0
+
                 let tap = ProcessTapController(
-                    pid: item.pid,
-                    processObjectID: item.objectID,
+                    pid: pid,
+                    processObjectIDs: appData.objectIDs,
                     outputUID: outUID,
                     service: tapService,
-                    initialVolume: item.initialVolume
+                    initialVolume: volume
                 )
-                do {
-                    try tap.activate()
-                    _activeTaps[item.pid] = tap
-                } catch {
-                    // Skip tap if activation fails
-                }
+                _activeTaps[pid] = tap
+                tapsToActivate.append(tap)
             }
         }
 
         // 3. Build updated process models
         var updatedProcesses: [AudioProcess] = []
-        for item in discovered {
-            let tap = _activeTaps[item.pid]
-            let vol = tap?.volume ?? item.initialVolume
+        for (pid, appData) in discoveredMap {
+            let tap = _activeTaps[pid]
+            let vol = tap?.volume ?? (appData.bundleID.flatMap { settingsManager.getAppVolume(forBundleID: $0) } ?? 1.0)
             let muted = tap?.isMuted ?? false
 
             updatedProcesses.append(AudioProcess(
-                pid: item.pid,
-                objectID: item.objectID,
-                bundleID: item.bundleID,
-                name: item.name,
+                pid: pid,
+                objectIDs: appData.objectIDs,
+                bundleID: appData.bundleID,
+                name: appData.name,
                 isMuted: muted,
                 volume: vol
             ))
         }
 
-        updatedProcesses.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        _processes = updatedProcesses
-        listeners = _changeListeners
+        let sorted = updatedProcesses.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let membershipChanged = (self._processes.map { $0.pid } != sorted.map { $0.pid })
+        self._processes = sorted
+        let listeners = self._changeListeners
         lock.unlock()
 
         for tap in tapsToInvalidate {
             tap.invalidate()
         }
 
-        for listener in listeners {
-            listener()
+        for tap in tapsToActivate {
+            try? tap.activate()
+        }
+
+        if membershipChanged {
+            for listener in listeners {
+                listener()
+            }
         }
     }
 
@@ -327,7 +370,7 @@ public final class ProcessAudioMixer: @unchecked Sendable {
     private func handleDeviceChange() {
         let newUID = deviceManager.defaultOutputDevice?.uid
         var tapsToRecreate: [(tap: ProcessTapController, uid: String)] = []
-        var tapsToActivate: [(pid: pid_t, objID: AudioObjectID, volume: Float, uid: String)] = []
+        var tapsToActivate: [(pid: pid_t, objIDs: [AudioObjectID], volume: Float, uid: String)] = []
         var tapsToInvalidate: [ProcessTapController] = []
         let listeners: [@Sendable () -> Void]
 
@@ -345,7 +388,7 @@ public final class ProcessAudioMixer: @unchecked Sendable {
 
             for proc in _processes {
                 if _activeTaps[proc.pid] == nil {
-                    tapsToActivate.append((pid: proc.pid, objID: proc.objectID, volume: proc.volume, uid: newUID))
+                    tapsToActivate.append((pid: proc.pid, objIDs: proc.objectIDs, volume: proc.volume, uid: newUID))
                 }
             }
         } else {
@@ -366,7 +409,7 @@ public final class ProcessAudioMixer: @unchecked Sendable {
         for item in tapsToActivate {
             let tap = ProcessTapController(
                 pid: item.pid,
-                processObjectID: item.objID,
+                processObjectIDs: item.objIDs,
                 outputUID: item.uid,
                 service: tapService,
                 initialVolume: item.volume

@@ -14,7 +14,7 @@ public protocol ProcessTapServiceProtocol: Sendable {
     func getAudioProcessObjectIDs() throws -> [AudioObjectID]
     func getPID(for processObjectID: AudioObjectID) throws -> pid_t
     func getProcessObjectID(for pid: pid_t) throws -> AudioObjectID
-    func createProcessTap(for processObjectID: AudioObjectID, tapUUID: UUID) throws -> AudioObjectID
+    func createProcessTap(for processObjectIDs: [AudioObjectID], tapUUID: UUID) throws -> AudioObjectID
     func destroyProcessTap(_ tapID: AudioObjectID) throws
     func createAggregateDevice(description: CFDictionary) throws -> AudioObjectID
     func destroyAggregateDevice(_ aggregateID: AudioObjectID) throws
@@ -22,4 +22,11 @@ public protocol ProcessTapServiceProtocol: Sendable {
     func destroyIOProc(aggregateID: AudioObjectID, procID: AudioDeviceIOProcID) throws
     func startIO(aggregateID: AudioObjectID, procID: AudioDeviceIOProcID) throws
     func stopIO(aggregateID: AudioObjectID, procID: AudioDeviceIOProcID) throws
+}
+
+@available(macOS 14.2, *)
+public extension ProcessTapServiceProtocol {
+    func createProcessTap(for processObjectID: AudioObjectID, tapUUID: UUID) throws -> AudioObjectID {
+        try createProcessTap(for: [processObjectID], tapUUID: tapUUID)
+    }
 }

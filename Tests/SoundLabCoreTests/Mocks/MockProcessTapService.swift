@@ -8,13 +8,18 @@ public final class MockProcessTapService: ProcessTapServiceProtocol, @unchecked 
 
     public struct TapRecord: Equatable, Sendable {
         public let tapID: AudioObjectID
-        public let processObjectID: AudioObjectID
+        public let processObjectIDs: [AudioObjectID]
+        public var processObjectID: AudioObjectID { processObjectIDs.first ?? 0 }
         public let tapUUID: UUID
 
-        public init(tapID: AudioObjectID, processObjectID: AudioObjectID, tapUUID: UUID) {
+        public init(tapID: AudioObjectID, processObjectIDs: [AudioObjectID], tapUUID: UUID) {
             self.tapID = tapID
-            self.processObjectID = processObjectID
+            self.processObjectIDs = processObjectIDs
             self.tapUUID = tapUUID
+        }
+
+        public init(tapID: AudioObjectID, processObjectID: AudioObjectID, tapUUID: UUID) {
+            self.init(tapID: tapID, processObjectIDs: [processObjectID], tapUUID: tapUUID)
         }
     }
 
@@ -69,15 +74,19 @@ public final class MockProcessTapService: ProcessTapServiceProtocol, @unchecked 
         return objID
     }
 
-    public func createProcessTap(for processObjectID: AudioObjectID, tapUUID: UUID) throws -> AudioObjectID {
+    public func createProcessTap(for processObjectIDs: [AudioObjectID], tapUUID: UUID) throws -> AudioObjectID {
         lock.lock()
         defer { lock.unlock() }
         if let error = errorToThrow { throw error }
         let tapID = nextTapID
         nextTapID += 1
-        let record = TapRecord(tapID: tapID, processObjectID: processObjectID, tapUUID: tapUUID)
+        let record = TapRecord(tapID: tapID, processObjectIDs: processObjectIDs, tapUUID: tapUUID)
         createdTaps[tapID] = record
         return tapID
+    }
+
+    public func createProcessTap(for processObjectID: AudioObjectID, tapUUID: UUID) throws -> AudioObjectID {
+        try createProcessTap(for: [processObjectID], tapUUID: tapUUID)
     }
 
     public func destroyProcessTap(_ tapID: AudioObjectID) throws {

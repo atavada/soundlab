@@ -6,7 +6,10 @@ public final class ProcessTapController: @unchecked Sendable {
     private let lock = NSLock()
 
     public let pid: pid_t
-    public let processObjectID: AudioObjectID
+    public private(set) var processObjectIDs: [AudioObjectID]
+    public var processObjectID: AudioObjectID {
+        processObjectIDs.first ?? 0
+    }
     public private(set) var outputUID: String
     private let service: ProcessTapServiceProtocol
 
@@ -27,13 +30,13 @@ public final class ProcessTapController: @unchecked Sendable {
 
     public init(
         pid: pid_t,
-        processObjectID: AudioObjectID,
+        processObjectIDs: [AudioObjectID],
         outputUID: String,
         service: ProcessTapServiceProtocol,
         initialVolume: Float = 1.0
     ) {
         self.pid = pid
-        self.processObjectID = processObjectID
+        self.processObjectIDs = processObjectIDs
         self.outputUID = outputUID
         self.service = service
 
@@ -43,6 +46,22 @@ public final class ProcessTapController: @unchecked Sendable {
 
         self.volumePointer = UnsafeMutablePointer<Float>.allocate(capacity: 1)
         self.volumePointer.initialize(to: clamped)
+    }
+
+    public convenience init(
+        pid: pid_t,
+        processObjectID: AudioObjectID,
+        outputUID: String,
+        service: ProcessTapServiceProtocol,
+        initialVolume: Float = 1.0
+    ) {
+        self.init(
+            pid: pid,
+            processObjectIDs: [processObjectID],
+            outputUID: outputUID,
+            service: service,
+            initialVolume: initialVolume
+        )
     }
 
     deinit {
@@ -166,7 +185,7 @@ public final class ProcessTapController: @unchecked Sendable {
         let uuid = UUID()
         self.tapUUID = uuid
 
-        let newTapID = try service.createProcessTap(for: processObjectID, tapUUID: uuid)
+        let newTapID = try service.createProcessTap(for: processObjectIDs, tapUUID: uuid)
         self.tapID = newTapID
 
         do {
@@ -178,6 +197,56 @@ public final class ProcessTapController: @unchecked Sendable {
             self.tapID = nil
             self.tapUUID = nil
             throw error
+        }
+    }
+
+    public func updateProcessObjectIDs(_ newObjectIDs: [AudioObjectID]) throws {
+        lock.lock()
+        let currentSet = Set(self.processObjectIDs)
+        let newSet = Set(newObjectIDs)
+        if currentSet == newSet {
+            lock.unlock()
+            return
+        }
+        self.processObjectIDs = newObjectIDs
+        let wasActive = self.isActive
+        let outUID = self.outputUID
+        lock.unlock()
+
+        if wasActive {
+            lock.lock()
+            defer { lock.unlock() }
+
+            if let aggID = self.aggregateID, let pID = self.procID {
+                try? service.stopIO(aggregateID: aggID, procID: pID)
+                try? service.destroyIOProc(aggregateID: aggID, procID: pID)
+                self.procID = nil
+            }
+            if let aggID = self.aggregateID {
+                try? service.destroyAggregateDevice(aggID)
+                self.aggregateID = nil
+            }
+            if let tID = self.tapID {
+                try? service.destroyProcessTap(tID)
+                self.tapID = nil
+            }
+
+            let uuid = UUID()
+            self.tapUUID = uuid
+            let newTapID = try service.createProcessTap(for: self.processObjectIDs, tapUUID: uuid)
+            self.tapID = newTapID
+
+            do {
+                let newAggID = try createAggregateAndStartIO(tapUUID: uuid, outputUID: outUID)
+                self.aggregateID = newAggID
+                self.isActive = true
+            } catch {
+                try? service.destroyProcessTap(newTapID)
+                self.tapID = nil
+                self.tapUUID = nil
+                self.isActive = false
+                throw error
+            }
         }
     }
 

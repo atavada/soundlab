@@ -34,9 +34,9 @@ private final class StateBox<T>: @unchecked Sendable {
 
         let appInfoProvider: ProcessAppInfoProvider = { pid in
             switch pid {
-            case 1001: return (name: "Spotify", bundleID: "com.spotify.client")
-            case 1002: return (name: "Safari", bundleID: "com.apple.Safari")
-            case 1003: return (name: "QuickTime", bundleID: "com.apple.QuickTimePlayerX")
+            case 1001: return ProcessAppInfo(pid: pid, name: "Spotify", bundleID: "com.spotify.client")
+            case 1002: return ProcessAppInfo(pid: pid, name: "Safari", bundleID: "com.apple.Safari")
+            case 1003: return ProcessAppInfo(pid: pid, name: "QuickTime", bundleID: "com.apple.QuickTimePlayerX")
             default: return nil
             }
         }
@@ -384,7 +384,7 @@ private final class StateBox<T>: @unchecked Sendable {
             tapService: mockTap,
             deviceManager: deviceManager,
             settingsManager: settings,
-            appInfoProvider: { _ in (name: "Spotify", bundleID: "com.spotify.client") }
+            appInfoProvider: { pid in ProcessAppInfo(pid: pid, name: "Spotify", bundleID: "com.spotify.client") }
         )
 
         mockTap.addProcess(pid: 1001, objectID: 50)
@@ -437,10 +437,10 @@ private final class StateBox<T>: @unchecked Sendable {
 
         let appInfoProvider: ProcessAppInfoProvider = { pid in
             switch pid {
-            case 2001: return (name: "Chrome Main", bundleID: "com.google.Chrome")
-            case 2002: return (name: "Chrome Helper", bundleID: "com.google.Chrome") // duplicate bundle ID
-            case 2003: return (name: "SoundLab", bundleID: "com.atavada.SoundLab") // self bundle ID
-            case 2004: return (name: "   ", bundleID: "com.empty.name") // empty name
+            case 2001: return ProcessAppInfo(pid: 2001, name: "Chrome Main", bundleID: "com.google.Chrome")
+            case 2002: return ProcessAppInfo(pid: 2001, name: "Chrome Main", bundleID: "com.google.Chrome") // Child helper resolves to root app PID 2001!
+            case 2003: return ProcessAppInfo(pid: 2003, name: "SoundLab", bundleID: "com.atavada.SoundLab") // self bundle ID
+            case 2004: return ProcessAppInfo(pid: 2004, name: "   ", bundleID: "com.empty.name") // empty name
             default: return nil // background daemons without GUI app info
             }
         }
@@ -460,11 +460,13 @@ private final class StateBox<T>: @unchecked Sendable {
 
         try mixer.refreshAudioProcesses()
 
-        // Only PID 2001 (Chrome Main) should be retained
+        // Only PID 2001 (Chrome Main) should be retained, with both objectIDs [60, 61]
         #expect(mixer.processes.count == 1)
         #expect(mixer.processes.first?.pid == 2001)
         #expect(mixer.processes.first?.name == "Chrome Main")
+        #expect(mixer.processes.first?.objectIDs == [60, 61])
         #expect(mixer.activeTaps.count == 1)
         #expect(mixer.activeTaps[2001] != nil)
+        #expect(mixer.activeTaps[2001]?.processObjectIDs == [60, 61])
     }
 }

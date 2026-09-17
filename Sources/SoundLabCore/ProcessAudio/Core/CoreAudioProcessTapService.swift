@@ -86,8 +86,11 @@ public final class CoreAudioProcessTapService: ProcessTapServiceProtocol, Sendab
         return processObjectID
     }
 
-    public func createProcessTap(for processObjectID: AudioObjectID, tapUUID: UUID) throws -> AudioObjectID {
-        let tapDescription = CATapDescription(stereoMixdownOfProcesses: [processObjectID])
+    public func createProcessTap(for processObjectIDs: [AudioObjectID], tapUUID: UUID) throws -> AudioObjectID {
+        guard !processObjectIDs.isEmpty else {
+            throw SoundLabAudioError.processObjectIDNotFound(id: 0)
+        }
+        let tapDescription = CATapDescription(stereoMixdownOfProcesses: processObjectIDs)
         tapDescription.uuid = tapUUID
         tapDescription.muteBehavior = .mutedWhenTapped
 
@@ -95,6 +98,10 @@ public final class CoreAudioProcessTapService: ProcessTapServiceProtocol, Sendab
         let status = AudioHardwareCreateProcessTap(tapDescription, &tapID)
         guard status == noErr else { throw SoundLabAudioError.halError(status) }
         return tapID
+    }
+
+    public func createProcessTap(for processObjectID: AudioObjectID, tapUUID: UUID) throws -> AudioObjectID {
+        try createProcessTap(for: [processObjectID], tapUUID: tapUUID)
     }
 
     public func destroyProcessTap(_ tapID: AudioObjectID) throws {
